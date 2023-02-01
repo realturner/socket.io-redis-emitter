@@ -2,7 +2,7 @@ import expect = require("expect.js");
 import { createClient, RedisClientType } from "redis";
 import { Server, Socket } from "socket.io";
 import { io as ioc, Socket as ClientSocket } from "socket.io-client";
-import { createAdapter } from "@socket.io/redis-adapter";
+import { createAdapter } from "@livapp/redis-adapter-hack";
 import { createServer } from "http";
 import { Emitter } from "..";
 import type { AddressInfo } from "net";

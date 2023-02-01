@@ -384,11 +384,54 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
       channel += this.rooms.keys().next().value + "#";
     }
 
-    debug("publishing message to channel %s", channel);
-
-    this.redisClient.publish(channel, msg);
+    this.getNumSub(channel).then((numSub) => {
+      if (numSub == 0) {
+        debug(
+          "skip publishing message to channel because of no subscriber: %s",
+          channel
+        );
+        return;
+      }
+      debug("publishing message to channel %s", channel);
+      this.redisClient.publish(channel, msg);
+    });
 
     return true;
+  }
+
+  private getNumSub(channel: string): Promise<number> {
+    if (
+      this.redisClient.constructor.name === "Cluster" ||
+      this.redisClient.isCluster
+    ) {
+      // Cluster
+      const nodes = this.redisClient.nodes();
+      return Promise.all(
+        nodes.map((node) => node.send_command("pubsub", ["numsub", channel]))
+      ).then((values) => {
+        let numSub = 0;
+        values.map((value) => {
+          numSub += parseInt(value[1], 10);
+        });
+        return numSub;
+      });
+    } else if (typeof this.redisClient.pSubscribe === "function") {
+      return this.redisClient
+        .sendCommand(["pubsub", "numsub", channel])
+        .then((res) => parseInt(res[1], 10));
+    } else {
+      // RedisClient or Redis
+      return new Promise((resolve, reject) => {
+        this.redisClient.send_command(
+          "pubsub",
+          ["numsub", channel],
+          (err, numSub) => {
+            if (err) return reject(err);
+            resolve(parseInt(numSub[1], 10));
+          }
+        );
+      });
+    }
   }
 
   /**
