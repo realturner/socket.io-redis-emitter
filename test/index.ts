@@ -28,7 +28,13 @@ const createPartialDone = (
   };
 };
 
-describe("emitter", () => {
+const flags = [];
+if (process.env.SHARDED_PUBSUB !== undefined) {
+  flags.push("sharded-pubsub");
+}
+describe(`emitter with ${
+  process.env.REDIS_CLUSTER ? "redis@4 cluster" : "redis@4"
+}${flags.length > 0 ? ` (${flags.join(", ")})` : ""}`, () => {
   let port: number,
     io: Server,
     pubClient: RedisClientType<any, any>,
@@ -46,7 +52,6 @@ describe("emitter", () => {
     io = new Server(httpServer, {
       adapter: createAdapter(pubClient, subClient, {
         shardedPubSub: process.env.SHARDED_PUBSUB !== undefined,
-        pubDelay: process.env.REDIS_CLUSTER !== undefined ? 5 : 0,
       }),
     });
 

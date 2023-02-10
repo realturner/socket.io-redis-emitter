@@ -92,18 +92,9 @@ export class Emitter<EmitEvents extends EventsMap = DefaultEventsMap> {
       shardedPubSub: !!this.opts.shardedPubSub,
       publish: !this.redisClient
         ? () => null
-        : this.opts.shardedPubSub
-        ? (channel, msg) => {
-            debug(
-              "[%s] publish message of %d bytes to %s",
-              UID,
-              msg.length,
-              channel
-            );
-            setTimeout(() => {
-              this.redisClient.sPublish(channel, msg);
-            }, 20);
-          }
+        : this.opts.shardedPubSub &&
+          typeof this.redisClient.sPublish === "function"
+        ? this.redisClient.sPublish.bind(this.redisClient)
         : this.redisClient.publish.bind(this.redisClient),
     };
   }
