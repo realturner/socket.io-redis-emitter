@@ -450,12 +450,11 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
           ...(this.redisClient.replicas || []),
         ];
         return Promise.all(
-          nodes.map((node) =>
-            this.redisClient
-              .nodeClient(node)
-              .sendCommand(["pubsub", "numsub", channel])
-              .then((res) => parseInt(res[1], 10))
-          )
+          nodes.map(async (node) => {
+            const client = await this.redisClient.nodeClient(node);
+            const res = client.sendCommand(["pubsub", "numsub", channel]);
+            return parseInt(res[1], 10);
+          })
         ).then((values) => {
           let sum = 0;
           for (const value of values) {
