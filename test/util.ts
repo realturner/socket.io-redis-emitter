@@ -30,6 +30,7 @@ export const createClient = (() => {
       const client = require("redis").createCluster({
         rootNodes,
       });
+      client.on("error", () => null);
       await client.connect();
       return client;
     };
