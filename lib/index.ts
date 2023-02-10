@@ -60,7 +60,6 @@ interface BroadcastOptions {
   requestChannel: string;
   parser: Parser;
   shardedPubSub: boolean;
-  publish: (channel, msg) => void;
 }
 
 interface BroadcastFlags {
@@ -90,12 +89,6 @@ export class Emitter<EmitEvents extends EventsMap = DefaultEventsMap> {
       requestChannel: this.opts.key + "-request#" + nsp + "#",
       parser: this.opts.parser,
       shardedPubSub: !!this.opts.shardedPubSub,
-      publish: !this.redisClient
-        ? () => null
-        : this.opts.shardedPubSub &&
-          typeof this.redisClient.sPublish === "function"
-        ? this.redisClient.sPublish.bind(this.redisClient)
-        : this.redisClient.publish.bind(this.redisClient),
     };
   }
 
@@ -253,10 +246,7 @@ export class Emitter<EmitEvents extends EventsMap = DefaultEventsMap> {
       data: args,
     });
 
-    this.broadcastOptions.publish(
-      this.broadcastOptions.requestChannel,
-      request
-    );
+    this.redisClient.publish(this.broadcastOptions.requestChannel, request);
   }
 }
 
@@ -405,19 +395,35 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
     let channel = this.broadcastOptions.broadcastChannel;
     if (this.rooms && this.rooms.size === 1) {
       channel += this.rooms.keys().next().value + "#";
-    }
-
-    this.getNumSub(channel).then((numSub) => {
-      if (numSub == 0) {
+      this.getNumSub(channel).then((numSub) => {
+        if (numSub == 0) {
+          debug(
+            "skip publishing message to channel because of no subscriber: %s (%j)",
+            channel,
+            this.broadcastOptions.shardedPubSub
+          );
+          return;
+        }
         debug(
-          "skip publishing message to channel because of no subscriber: %s",
-          channel
+          "publishing message to channel %s (%j)",
+          channel,
+          this.broadcastOptions.shardedPubSub
         );
-        return;
-      }
+        if (this.broadcastOptions.shardedPubSub) {
+          this.redisClient.sPublish(channel, msg);
+        } else {
+          this.redisClient.publish(channel, msg);
+        }
+      });
+    } else {
+      // no need to check number of subscribers for general channel
       debug("publishing message to channel %s", channel);
-      this.broadcastOptions.publish(channel, msg);
-    });
+      if (this.broadcastOptions.shardedPubSub) {
+        this.redisClient.sPublish(channel, msg);
+      } else {
+        this.redisClient.publish(channel, msg);
+      }
+    }
 
     return true;
   }
@@ -440,7 +446,10 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
       });
     } else if (typeof this.redisClient.getSlotRandomNode === "function") {
       // redis@4 cluster
-      if (this.broadcastOptions.shardedPubSub) {
+      if (
+        this.broadcastOptions.shardedPubSub &&
+        channel.startsWith(this.broadcastOptions.broadcastChannel)
+      ) {
         return this.redisClient
           .sendCommand(channel, false, ["pubsub", "shardnumsub", channel])
           .then((resp) => resp[1] as number);
@@ -452,7 +461,7 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
         return Promise.all(
           nodes.map(async (node) => {
             const client = await this.redisClient.nodeClient(node);
-            const res = client.sendCommand(["pubsub", "numsub", channel]);
+            const res = await client.sendCommand(["pubsub", "numsub", channel]);
             return parseInt(res[1], 10);
           })
         ).then((values) => {
@@ -498,10 +507,7 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
       rooms: Array.isArray(rooms) ? rooms : [rooms],
     });
 
-    this.broadcastOptions.publish(
-      this.broadcastOptions.requestChannel,
-      request
-    );
+    this.redisClient.publish(this.broadcastOptions.requestChannel, request);
   }
 
   /**
@@ -520,10 +526,7 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
       rooms: Array.isArray(rooms) ? rooms : [rooms],
     });
 
-    this.broadcastOptions.publish(
-      this.broadcastOptions.requestChannel,
-      request
-    );
+    this.redisClient.publish(this.broadcastOptions.requestChannel, request);
   }
 
   /**
@@ -542,9 +545,6 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
       close,
     });
 
-    this.broadcastOptions.publish(
-      this.broadcastOptions.requestChannel,
-      request
-    );
+    this.redisClient.publish(this.broadcastOptions.requestChannel, request);
   }
 }
