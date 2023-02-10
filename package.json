@@ -1,6 +1,6 @@
 {
   "name": "@livapp/redis-emitter-hack",
-  "version": "5.1.0",
+  "version": "5.2.0",
   "description": "The Socket.IO Redis emitter, allowing to communicate with a group of Socket.IO servers from another Node.js process",
   "license": "MIT",
   "repository": {
@@ -27,7 +27,7 @@
     "socket.io-parser": "~4.2.1"
   },
   "devDependencies": {
-    "@livapp/redis-adapter-hack": "=8.0.5",
+    "@livapp/redis-adapter-hack": "^8.1.0",
     "@types/mocha": "^8.2.1",
     "@types/node": "^14.14.35",
     "expect.js": "~0.3.1",
