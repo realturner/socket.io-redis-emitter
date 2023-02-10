@@ -1,5 +1,5 @@
 import expect = require("expect.js");
-import { createClient, RedisClientType } from "redis";
+import { RedisClientType } from "redis";
 import { Server, Socket } from "socket.io";
 import { io as ioc, Socket as ClientSocket } from "socket.io-client";
 import { createAdapter } from "@livapp/redis-adapter-hack";
@@ -7,7 +7,7 @@ import { createServer } from "http";
 import { Emitter } from "..";
 import type { AddressInfo } from "net";
 
-import "./util";
+import { createClient } from "./util";
 
 const SOCKETS_COUNT = 3;
 
@@ -40,13 +40,14 @@ describe("emitter", () => {
   beforeEach(async () => {
     const httpServer = createServer();
 
-    pubClient = createClient();
-    subClient = createClient();
-
-    await Promise.all([pubClient.connect(), subClient.connect()]);
+    pubClient = await createClient();
+    subClient = await createClient();
 
     io = new Server(httpServer, {
-      adapter: createAdapter(pubClient, subClient),
+      adapter: createAdapter(pubClient, subClient, {
+        shardedPubSub: process.env.SHARDED_PUBSUB !== undefined,
+        pubDelay: process.env.REDIS_CLUSTER !== undefined ? 5 : 0,
+      }),
     });
 
     httpServer.listen(() => {
@@ -59,7 +60,9 @@ describe("emitter", () => {
 
     serverSockets = [];
 
-    emitter = new Emitter(pubClient);
+    emitter = new Emitter(pubClient, {
+      shardedPubSub: process.env.SHARDED_PUBSUB !== undefined,
+    });
 
     return new Promise((resolve) => {
       io.on("connection", (socket) => {
@@ -72,8 +75,8 @@ describe("emitter", () => {
   });
 
   afterEach(() => {
-    pubClient.quit();
-    subClient.quit();
+    pubClient.disconnect();
+    subClient.disconnect();
     io.close();
     clientSockets.forEach((socket) => {
       socket.disconnect();
@@ -183,7 +186,9 @@ describe("emitter", () => {
         expect().fail();
       });
 
-      emitter.to("room1").emit("broadcast event", "broadcast payload");
+      setTimeout(() => {
+        emitter.to("room1").emit("broadcast event", "broadcast payload");
+      }, 20);
     });
 
     it("should be able to emit to a socket by id", (done) => {

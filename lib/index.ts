@@ -41,6 +41,17 @@ export interface EmitterOptions {
    * Defaults to notepack.io, a MessagePack implementation.
    */
   parser?: Parser;
+  /**
+   * Whether to publish / subscribe using sharded command introduced in 7.0.0
+   *
+   * - if true, will use spublish / ssubscribe
+   * - if false, will use publish / subscribe command
+   *
+   * Currently only redis@4 will be supported.
+   *
+   * @default false
+   */
+  shardedPubSub?: boolean;
 }
 
 interface BroadcastOptions {
@@ -48,6 +59,8 @@ interface BroadcastOptions {
   broadcastChannel: string;
   requestChannel: string;
   parser: Parser;
+  shardedPubSub: boolean;
+  publish: (channel, msg) => void;
 }
 
 interface BroadcastFlags {
@@ -76,6 +89,22 @@ export class Emitter<EmitEvents extends EventsMap = DefaultEventsMap> {
       broadcastChannel: this.opts.key + "#" + nsp + "#",
       requestChannel: this.opts.key + "-request#" + nsp + "#",
       parser: this.opts.parser,
+      shardedPubSub: !!this.opts.shardedPubSub,
+      publish: !this.redisClient
+        ? () => null
+        : this.opts.shardedPubSub
+        ? (channel, msg) => {
+            debug(
+              "[%s] publish message of %d bytes to %s",
+              UID,
+              msg.length,
+              channel
+            );
+            setTimeout(() => {
+              this.redisClient.sPublish(channel, msg);
+            }, 20);
+          }
+        : this.redisClient.publish.bind(this.redisClient),
     };
   }
 
@@ -233,7 +262,10 @@ export class Emitter<EmitEvents extends EventsMap = DefaultEventsMap> {
       data: args,
     });
 
-    this.redisClient.publish(this.broadcastOptions.requestChannel, request);
+    this.broadcastOptions.publish(
+      this.broadcastOptions.requestChannel,
+      request
+    );
   }
 }
 
@@ -393,7 +425,7 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
         return;
       }
       debug("publishing message to channel %s", channel);
-      this.redisClient.publish(channel, msg);
+      this.broadcastOptions.publish(channel, msg);
     });
 
     return true;
@@ -415,6 +447,32 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
         });
         return numSub;
       });
+    } else if (typeof this.redisClient.getSlotRandomNode === "function") {
+      // redis@4 cluster
+      if (this.broadcastOptions.shardedPubSub) {
+        return this.redisClient
+          .sendCommand(channel, false, ["pubsub", "shardnumsub", channel])
+          .then((resp) => resp[1] as number);
+      } else {
+        const nodes = [
+          ...(this.redisClient.masters || []),
+          ...(this.redisClient.replicas || []),
+        ];
+        return Promise.all(
+          nodes.map((node) =>
+            this.redisClient
+              .nodeClient(node)
+              .sendCommand(["pubsub", "numsub", channel])
+              .then((res) => parseInt(res[1], 10))
+          )
+        ).then((values) => {
+          let sum = 0;
+          for (const value of values) {
+            sum += value;
+          }
+          return sum;
+        });
+      }
     } else if (typeof this.redisClient.pSubscribe === "function") {
       return this.redisClient
         .sendCommand(["pubsub", "numsub", channel])
@@ -450,7 +508,10 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
       rooms: Array.isArray(rooms) ? rooms : [rooms],
     });
 
-    this.redisClient.publish(this.broadcastOptions.requestChannel, request);
+    this.broadcastOptions.publish(
+      this.broadcastOptions.requestChannel,
+      request
+    );
   }
 
   /**
@@ -469,7 +530,10 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
       rooms: Array.isArray(rooms) ? rooms : [rooms],
     });
 
-    this.redisClient.publish(this.broadcastOptions.requestChannel, request);
+    this.broadcastOptions.publish(
+      this.broadcastOptions.requestChannel,
+      request
+    );
   }
 
   /**
@@ -488,6 +552,9 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
       close,
     });
 
-    this.redisClient.publish(this.broadcastOptions.requestChannel, request);
+    this.broadcastOptions.publish(
+      this.broadcastOptions.requestChannel,
+      request
+    );
   }
 }

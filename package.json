@@ -13,7 +13,10 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "test": "npm run format:check && tsc && nyc mocha --require ts-node/register --timeout 5000 test/index.ts --exit",
+    "test": "npm run format:check && tsc && npm run test:standalone && npm run test:cluster && npm run test:cluster-sharded-pubsub",
+    "test:standalone": "nyc mocha --require ts-node/register --timeout 5000 test/index.ts --exit",
+    "test:cluster": "REDIS_CLUSTER=redis://173.18.0.2:6379 nyc mocha --require ts-node/register --timeout 5000 test/index.ts --exit",
+    "test:cluster-sharded-pubsub": "REDIS_CLUSTER=redis://173.18.0.2:6379 SHARDED_PUBSUB=1 nyc mocha --require ts-node/register --timeout 5000 test/index.ts --exit",
     "format:check": "prettier --parser typescript --check 'lib/**/*.ts' 'test/**/*.ts'",
     "format:fix": "prettier --parser typescript --write 'lib/**/*.ts' 'test/**/*.ts'",
     "prepack": "tsc"
@@ -31,7 +34,7 @@
     "mocha": "^9.1.3",
     "nyc": "^15.1.0",
     "prettier": "^2.2.1",
-    "redis": "^4.0.1",
+    "redis": "^4.6.4",
     "socket.io": "^4.5.4",
     "socket.io-client": "^4.5.4",
     "ts-node": "^9.1.1",

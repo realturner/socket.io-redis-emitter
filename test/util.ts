@@ -20,3 +20,24 @@ Assertion.prototype.contain = function (...args) {
   }
   return contain.apply(this, args);
 };
+
+export const createClient = (() => {
+  if (process.env.REDIS_CLUSTER !== undefined) {
+    const rootNodes = process.env.REDIS_CLUSTER.split(",").map((url) => ({
+      url,
+    }));
+    return async () => {
+      const client = require("redis").createCluster({
+        rootNodes,
+      });
+      await client.connect();
+      return client;
+    };
+  } else {
+    return async () => {
+      const client = require("redis").createClient();
+      await client.connect();
+      return client;
+    };
+  }
+})();

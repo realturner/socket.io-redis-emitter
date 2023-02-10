@@ -1,11 +1,12 @@
 import expect = require("expect.js");
-import { createClient, RedisClientType } from "redis";
+import { RedisClientType } from "redis";
 import { Server, Socket } from "socket.io";
 import { io as ioc, Socket as ClientSocket } from "socket.io-client";
 import { createAdapter } from "@livapp/redis-adapter-hack";
 import { createServer } from "http";
 import { Emitter } from "..";
 import type { AddressInfo } from "net";
+import { createClient } from "./util";
 
 const SOCKETS_COUNT = 3;
 
@@ -21,10 +22,8 @@ describe("emitter - custom parser", () => {
   beforeEach(async () => {
     const httpServer = createServer();
 
-    pubClient = createClient();
-    subClient = createClient();
-
-    await Promise.all([pubClient.connect(), subClient.connect()]);
+    pubClient = await createClient();
+    subClient = await createClient();
 
     io = new Server(httpServer, {
       adapter: createAdapter(pubClient, subClient, {
