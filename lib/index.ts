@@ -395,35 +395,27 @@ export class BroadcastOperator<EmitEvents extends EventsMap>
     let channel = this.broadcastOptions.broadcastChannel;
     if (this.rooms && this.rooms.size === 1) {
       channel += this.rooms.keys().next().value + "#";
-      this.getNumSub(channel).then((numSub) => {
-        if (numSub == 0) {
-          debug(
-            "skip publishing message to channel because of no subscriber: %s (%j)",
-            channel,
-            this.broadcastOptions.shardedPubSub
-          );
-          return;
-        }
+    }
+    this.getNumSub(channel).then((numSub) => {
+      if (numSub == 0) {
         debug(
-          "publishing message to channel %s (%j)",
+          "skip publishing message to channel because of no subscriber: %s (%j)",
           channel,
           this.broadcastOptions.shardedPubSub
         );
-        if (this.broadcastOptions.shardedPubSub) {
-          this.redisClient.sPublish(channel, msg);
-        } else {
-          this.redisClient.publish(channel, msg);
-        }
-      });
-    } else {
-      // no need to check number of subscribers for general channel
-      debug("publishing message to channel %s", channel);
+        return;
+      }
+      debug(
+        "publishing message to channel %s (%j)",
+        channel,
+        this.broadcastOptions.shardedPubSub
+      );
       if (this.broadcastOptions.shardedPubSub) {
         this.redisClient.sPublish(channel, msg);
       } else {
         this.redisClient.publish(channel, msg);
       }
-    }
+    });
 
     return true;
   }
